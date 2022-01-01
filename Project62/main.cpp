@@ -7,8 +7,6 @@
 #include <cmath>
 #include <random>
 
-bool debug_remove = false;
-
 #define private public
 
 //concept std::like in C++23
@@ -141,12 +139,6 @@ private:
 		auto other_balance = deref(child)->_get_balance();
 		if (other_balance > 0) {
 			_case |= 0b00000001;
-		}
-
-		//DEBUG
-		if (debug_remove)
-		{
-			std::cout << balance << ", " << other_balance << std::endl;
 		}
 
 		switch (_case)
@@ -420,13 +412,10 @@ int main()
 	std::uniform_int_distribution distribute(-1000, 1000);
 
 	AVL<int, double> tree;
-	debug_remove = false;
 	for (int count = 0; count < 1000; ++count)
 	{
 		tree.push(distribute(e), static_cast<double>(count));
 	}
-
-	debug_remove = true;
 
 	for (int count = 0; count < 1000; ++count)
 	{
