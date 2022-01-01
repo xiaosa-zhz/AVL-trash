@@ -70,13 +70,13 @@ private:
 		return child ? (child->_height) : 0;
 	}
 
-#define AVL_ROTATE_OPERATION(COUNTER_ROTATE_DIRECTION, ROTATE_DIRECTION)	\
-	auto new_root = std::move(old_root->_child_##COUNTER_ROTATE_DIRECTION);	\
-	auto temp_hold = std::move(new_root->_child_##ROTATE_DIRECTION);		\
-	old_root->_child_##COUNTER_ROTATE_DIRECTION = std::move(temp_hold);		\
-	old_root->_update_height();												\
-	new_root->_child_##ROTATE_DIRECTION = std::move(old_root);				\
-	new_root->_update_height();												\
+#define AVL_ROTATE_OPERATION(COUNTER_ROTATE_DIRECTION, ROTATE_DIRECTION)    \
+	auto new_root = std::move(old_root->_child_##COUNTER_ROTATE_DIRECTION); \
+	auto temp_hold = std::move(new_root->_child_##ROTATE_DIRECTION);        \
+	old_root->_child_##COUNTER_ROTATE_DIRECTION = std::move(temp_hold);     \
+	old_root->_update_height();                                             \
+	new_root->_child_##ROTATE_DIRECTION = std::move(old_root);              \
+	new_root->_update_height();                                             \
 	return new_root
 
 	static std::unique_ptr<_Node> _right_rotate(std::unique_ptr<_Node> old_root)
