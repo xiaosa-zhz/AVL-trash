@@ -6,6 +6,13 @@
 #include <tuple>
 #include <cmath>
 #include <random>
+#include <chrono>
+#include <vector>
+#include <stack>
+#include <map>
+
+//std::stack<std::tuple<int, bool>> remove_callstack;
+//std::stack<int> DFS_callstack;
 
 #define private public
 
@@ -14,7 +21,7 @@ template<typename T, typename U>
 concept is_cvref_t_of = std::is_same_v<U, std::remove_cvref_t<T>>;
 
 #define UNREACHABLE_BUILDIN_WRAPPER __assume(false)
-#define assert(expression) do { if(!(expression)) { throw std::exception{ "WTF" } } } while(false)
+#define assert(expression) do { if(!(expression)) { throw std::exception{ "WTF" }; } } while(false)
 
 template<typename _KeyTy, typename _ValTy>
 requires std::totally_ordered<_KeyTy>
@@ -25,6 +32,11 @@ public:
 	using value_type = _ValTy;
 private:
 #define FWD(FORWARD_REF) std::forward<decltype(FORWARD_REF)>(FORWARD_REF)
+
+	enum class is_height_updated : bool
+	{
+		HEIGHT_UPDATE_NO_NEED = false, HEIGHT_UPDATE_NEEDED = true
+	};
 
 	class _Node
 	{
@@ -46,16 +58,16 @@ private:
 			_key(std::move(_old_node._key)), 
 			_child_left(std::move(_old_node._child_left)), 
 			_child_right(std::move(_old_node._child_right)), 
-			_value(FWD(_new_value)) {}
+			_value(FWD(_new_value)), _height(_old_node._height) {}
 
-		bool _update_height()
+		is_height_updated _update_height()
 		{
 			auto new_height = 1 + std::max(_get_height(_child_left), _get_height(_child_right));
 			if (new_height == _height) {
-				return false;
+				return is_height_updated::HEIGHT_UPDATE_NO_NEED;
 			} else {
 				_height = new_height;
-				return true;
+				return is_height_updated::HEIGHT_UPDATE_NEEDED;
 			}
 		}
 
@@ -65,7 +77,7 @@ private:
 		}
 	};
 
-	static size_t _get_height(std::unique_ptr<_Node>& child)
+	static long long _get_height(std::unique_ptr<_Node>& child)
 	{
 		return child ? (child->_height) : 0;
 	}
@@ -156,23 +168,15 @@ private:
 			root = std::move(_left_rotate(std::move(root)));
 			break;
 		}
+
+		root->_update_height();
 	}
-
-	
-	//using is_height_updated = bool;
-	//constexpr static bool HEIGHT_UPDATE_NEEDED = true;
-	//constexpr static bool HEIGHT_UPDATE_NO_NEED = false;
-
-	enum class is_height_updated : bool
-	{
-		HEIGHT_UPDATE_NO_NEED = false, HEIGHT_UPDATE_NEEDED = true
-	};
 
 	static is_height_updated _further_update(std::unique_ptr<_Node>& root)
 	{
 		auto balance = root->_get_balance();
 		if (balance > -2 && balance < 2) { //-1, 0, 1 rebalance no need
-			return is_height_updated{ root->_update_height() };
+			return root->_update_height();
 		}
 
 		//need rebalance
@@ -224,6 +228,17 @@ private:
 		std::unique_ptr<_Node>& root,
 		is_cvref_t_of<key_type> auto&& key)
 	{
+		//DEBUG
+		//bool marker = false;
+		//struct Guard
+		//{ 
+		//	std::unique_ptr<_Node>& root;
+		//	bool& marker;
+		//	Guard(auto& root, auto& marker) : root(root), marker(marker) {}
+		//	~Guard() { remove_callstack.push({ (root ? root->_key : 1919810), marker}); }
+		//} guard(root, marker);
+
+
 		if (!root) //fail to find a node to remove
 		{
 			[[unlikely]];
@@ -237,85 +252,85 @@ private:
 			//from now on, root should not be used until it get the new node to hold
 			//old node will be released at the end of this if scope
 			//use ready_to_release as former root
-			auto is_further_update_needed = is_height_updated::HEIGHT_UPDATE_NO_NEED;
-			if (!(ready_to_release->_child_right))
-			{
-				//if the removing node has no right child, replace it directly with its left child
-				root = std::move(ready_to_release->_child_left);
-				is_further_update_needed = is_height_updated::HEIGHT_UPDATE_NEEDED;
-			}
-			else if (!(ready_to_release->_child_left))
-			{
-				//do the same thing with left child
-				root = std::move(ready_to_release->_child_right);
-				is_further_update_needed = is_height_updated::HEIGHT_UPDATE_NEEDED;
-			}
-			else
-			{
-				//find the most right node on the left child tree and let it move to here
-				//NOTE: in a well-maintained AVL tree, such node shall have a left child tree with 0 or 1 height
-				std::unique_ptr<_Node> old_left_child_tree = std::move(ready_to_release->_child_left);
-				std::unique_ptr<_Node> old_right_child_tree = std::move(ready_to_release->_child_right);
-				std::unique_ptr<_Node> new_root;
 
-				//lambda definition
-				auto find_most_right_child_and_replace = 
-					[&new_root, & old_left_child_tree, & old_right_child_tree]
-				(auto&& self, std::unique_ptr<_Node>& iter_root) -> is_height_updated
+			//DEBUG
+			//marker = true;
+			//std::cout << ready_to_release->_key << std::endl;
+
+			{
+				if (!(ready_to_release->_child_right))
 				{
-					auto is_further_update_needed = is_height_updated::HEIGHT_UPDATE_NO_NEED;
-					if (iter_root->_child_right) //not yet the most right node
-					{
-						is_further_update_needed = self(self, iter_root->_child_right);
-					}
-					else
-					{
-						//the most right node is this one
-						//according to the NOTE, only need to replace it with its left child (null or not both OK)
-						//and then this node can be used to replace 'the root'
-						//assert(_get_height(iter_root) <= 1);
-						std::unique_ptr<_Node> temp = std::move(iter_root);
-						iter_root = std::move(temp->_child_left);
-						new_root = std::move(temp);
-						new_root->_child_left = std::move(old_left_child_tree);
-						new_root->_child_right = std::move(old_right_child_tree);
-						new_root->_update_height();
-						is_further_update_needed = is_height_updated::HEIGHT_UPDATE_NEEDED;
-					}
-
-					if (is_further_update_needed == is_height_updated::HEIGHT_UPDATE_NEEDED) {
-						if (iter_root)
-						{
-							return _further_update(iter_root);
-						}
-						else
-						{
-							return is_height_updated::HEIGHT_UPDATE_NEEDED;
-						}
-					} else {
-						return is_height_updated::HEIGHT_UPDATE_NO_NEED;
-					}
-				};
-				//lambda end
-
-				is_further_update_needed =
-					find_most_right_child_and_replace(find_most_right_child_and_replace, old_left_child_tree);
-				//after execution of this lambda, root becomes valid and reachable again
-				root = std::move(new_root);
-			}
-
-			if (is_further_update_needed == is_height_updated::HEIGHT_UPDATE_NEEDED) {
-				if (root) //root could be set to nullptr, which need no update itself, just inform former nodes
+					//if the removing node has no right child, replace it directly with its left child
+					root = std::move(ready_to_release->_child_left);
+				}
+				else if (!(ready_to_release->_child_left))
 				{
-					return _further_update(root);
+					//do the same thing with left child
+					root = std::move(ready_to_release->_child_right);
+				}
+				else if (!(ready_to_release->_child_left->_child_right))
+				{
+					//deal with the situation when left child tree has no right child
+					//this could not be handled by following part
+					std::unique_ptr<_Node> temp = std::move(ready_to_release->_child_right);
+					root = std::move(ready_to_release->_child_left);
+					root->_child_right = std::move(temp);
 				}
 				else
 				{
-					return is_height_updated::HEIGHT_UPDATE_NEEDED;
+					//find the most right node on the left child tree and let it move to here
+					//NOTE: in a well-maintained AVL tree, such node shall have a left child tree with 0 or 1 height
+					std::unique_ptr<_Node> old_left_child_tree = std::move(ready_to_release->_child_left);
+					std::unique_ptr<_Node> old_right_child_tree = std::move(ready_to_release->_child_right);
+					std::unique_ptr<_Node> new_root;
+
+					//lambda definition
+					auto find_most_right_child_and_replace = 
+						[&new_root]
+					(auto&& self, std::unique_ptr<_Node>& iter_root) -> is_height_updated
+					{
+						auto is_further_update_needed = is_height_updated::HEIGHT_UPDATE_NO_NEED;
+						if (iter_root->_child_right) //not yet the most right node
+						{
+							is_further_update_needed = self(self, iter_root->_child_right);
+						}
+						else
+						{
+							//the most right node is this one
+							//according to the NOTE, only need to replace it with its left child (null or not both OK)
+							//and then this node can be used to replace 'the root'
+							//assert(_get_height(iter_root->_child_left) <= 1);
+							std::unique_ptr<_Node> temp = std::move(iter_root);
+							iter_root = std::move(temp->_child_left);
+							new_root = std::move(temp);
+							if (iter_root)
+							{
+								_further_update(iter_root);
+							}
+							return is_height_updated::HEIGHT_UPDATE_NEEDED;
+						}
+
+						if (is_further_update_needed == is_height_updated::HEIGHT_UPDATE_NEEDED) {
+							return _further_update(iter_root);
+						} else {
+							return is_height_updated::HEIGHT_UPDATE_NO_NEED;
+						}
+					};
+					//lambda end
+
+					find_most_right_child_and_replace(find_most_right_child_and_replace, old_left_child_tree);
+					//after execution of this lambda, root becomes valid and reachable again
+					new_root->_child_left = std::move(old_left_child_tree);
+					new_root->_child_right = std::move(old_right_child_tree);
+					root = std::move(new_root);
 				}
-			} else {
-				return is_height_updated::HEIGHT_UPDATE_NO_NEED;
 			}
+
+			if (root) //root could be set to nullptr, which need no update itself, just inform former nodes
+			{
+				_further_update(root);
+			}
+			return is_height_updated::HEIGHT_UPDATE_NEEDED;
 		}
 
 		//not yet find the node
@@ -362,33 +377,74 @@ public:
 		_remove_impl(this->_head, FWD(key));
 		return *this;
 	}
+
+	//DEBUG
+	void DFS_impl(std::unique_ptr<_Node>& root)
+	{
+		if (root == nullptr) return;
+		//DFS_callstack.push(root->_key);
+		DFS_impl(root->_child_left);
+		DFS_impl(root->_child_right);
+		//check height
+		try
+		{
+			assert(root->_update_height() == is_height_updated::HEIGHT_UPDATE_NO_NEED);
+		}
+		catch (...)
+		{
+			/*auto& DFScs = DFS_callstack._Get_container();
+			auto& removecs = remove_callstack._Get_container();
+			while (!remove_callstack.empty())
+			{
+				auto& call = remove_callstack.top();
+				std::cout << std::get<int>(call) << ' ' << std::get<bool>(call) << '\n';
+				remove_callstack.pop();
+			}
+			std::cout << '\n';
+			while (!DFS_callstack.empty())
+			{
+				auto DFScall = DFS_callstack.top();
+				std::cout << DFScall << '\n';
+				DFS_callstack.pop();
+			}
+			std::cout << std::flush;*/
+			throw;
+		}
+		//DFS_callstack.pop();
+	}
+
+	//DEBUG
+	void DFS_debug_check()
+	{
+		DFS_impl(this->_head);
+	}
 };
 
-//#undef FWD
+#undef FWD
 
-#define TEST constexpr auto
-
-template<typename key_type, typename value_type>
-class TestNode
-{
-public:
-	value_type _value;
-	char _balance = 0;
-	std::unique_ptr<TestNode> _child_left;
-	std::unique_ptr<TestNode> _child_right;
-	key_type _key;
-
-	TestNode(is_cvref_t_of<key_type> auto&& _new_key, is_cvref_t_of<value_type> auto&& _new_value) :
-		_key(FWD(_new_key)),
-		_value(FWD(_new_value)),
-		_child_left(), _child_right() {}
-
-	TestNode(TestNode&& _old_node, is_cvref_t_of<value_type> auto&& _new_value) :
-		_key(std::move(_old_node._key)),
-		_child_left(std::move(_old_node._child_left)),
-		_child_right(std::move(_old_node._child_right)),
-		_value(FWD(_new_value)) {}
-};
+//#define TEST constexpr auto
+//
+//template<typename key_type, typename value_type>
+//class TestNode
+//{
+//public:
+//	value_type _value;
+//	char _balance = 0;
+//	std::unique_ptr<TestNode> _child_left;
+//	std::unique_ptr<TestNode> _child_right;
+//	key_type _key;
+//
+//	TestNode(is_cvref_t_of<key_type> auto&& _new_key, is_cvref_t_of<value_type> auto&& _new_value) :
+//		_key(FWD(_new_key)),
+//		_value(FWD(_new_value)),
+//		_child_left(), _child_right() {}
+//
+//	TestNode(TestNode&& _old_node, is_cvref_t_of<value_type> auto&& _new_value) :
+//		_key(std::move(_old_node._key)),
+//		_child_left(std::move(_old_node._child_left)),
+//		_child_right(std::move(_old_node._child_right)),
+//		_value(FWD(_new_value)) {}
+//};
 
 void DFSMF(auto&& root)
 {
@@ -406,20 +462,86 @@ void DFSLF(auto&& root)
 	DFSLF(root->_child_right);
 }
 
-int main()
+void benchmark()
 {
-	std::default_random_engine e{ std::random_device{}() };
-	std::uniform_int_distribution distribute(-1000, 1000);
+	constexpr static int BENCHMARK_SIZE = 100000;
+	namespace chrono = std::chrono;
 
-	AVL<int, double> tree;
-	for (int count = 0; count < 1000; ++count)
+	std::default_random_engine e{ std::random_device{}() };
+	std::uniform_int_distribution distribute(-100000, 100000);
+
+	std::vector<int> test_data;
+	test_data.reserve(BENCHMARK_SIZE);
+
+	for (int count = 0; count < BENCHMARK_SIZE; ++count)
 	{
-		tree.push(distribute(e), static_cast<double>(count));
+		test_data.push_back(distribute(e));
 	}
 
-	for (int count = 0; count < 1000; ++count)
+	auto start = chrono::system_clock::now();
+	auto iter = test_data.begin();
+	auto end = chrono::system_clock::now();
+	auto dur = chrono::duration_cast<chrono::microseconds>(end - start);
+
+	AVL<int, double> tree;
+
+	start = chrono::system_clock::now();
+	iter = test_data.begin();
+	while (iter != test_data.end())
+	{
+		tree.push(*iter, static_cast<double>(*iter));
+		++iter;
+	}
+
+	iter = test_data.begin();
+	while (iter != test_data.end())
+	{
+		tree.remove(*iter);
+		++iter;
+	}
+	end = chrono::system_clock::now();
+	dur = chrono::duration_cast<chrono::microseconds>(end - start);
+	std::cout << "Duration 1: " << dur << std::endl;
+
+	std::map<int, double> map;
+	start = chrono::system_clock::now();
+	iter = test_data.begin();
+	while (iter != test_data.end())
+	{
+		map.insert({ *iter, static_cast<double>(*iter) });
+		++iter;
+	}
+
+	iter = test_data.begin();
+	while (iter != test_data.end())
+	{
+		map.erase(*iter);
+		++iter;
+	}
+	end = chrono::system_clock::now();
+	dur = chrono::duration_cast<chrono::microseconds>(end - start);
+	std::cout << "Duration 2: " << dur << std::endl;
+}
+
+int main()
+{
+	//benchmark();
+	std::default_random_engine e{ std::random_device{}() };
+	std::uniform_int_distribution distribute(-100000, 100000);
+
+	AVL<int, double> tree;
+	for (int count = 0; count < 100000; ++count)
+	{
+		tree.push(distribute(e), static_cast<double>(count));
+		//tree.DFS_debug_check();
+	}
+
+	for (int count = 0; count < 100000; ++count)
 	{
 		tree.remove(distribute(e));
+		//tree.DFS_debug_check();
+		//while (!remove_callstack.empty()) { remove_callstack.pop(); }
+		//while (!DFS_callstack.empty()) { DFS_callstack.pop(); }
 	}
 
 	DFSLF(tree._head);
