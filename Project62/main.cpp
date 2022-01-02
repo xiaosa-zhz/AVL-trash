@@ -15,7 +15,7 @@
 //std::stack<std::tuple<int, bool>> remove_callstack;
 //std::stack<int> DFS_callstack;
 
-#define private public
+//#define private public
 
 //concept std::like in C++23
 template<typename T, typename U>
