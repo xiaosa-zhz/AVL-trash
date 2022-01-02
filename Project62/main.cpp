@@ -10,6 +10,7 @@
 #include <vector>
 #include <stack>
 #include <map>
+#include <atomic>
 
 //std::stack<std::tuple<int, bool>> remove_callstack;
 //std::stack<int> DFS_callstack;
@@ -364,7 +365,7 @@ public:
 		else { return std::nullopt; }
 	}
 
-	AVL& push(
+	AVL& insert(
 		is_cvref_t_of<key_type> auto&& key,
 		is_cvref_t_of<value_type> auto&& value)
 	{
@@ -372,7 +373,7 @@ public:
 		return *this;
 	}
 
-	AVL& remove(is_cvref_t_of<key_type> auto&& key)
+	AVL& erase(is_cvref_t_of<key_type> auto&& key)
 	{
 		_remove_impl(this->_head, FWD(key));
 		return *this;
@@ -446,108 +447,141 @@ public:
 //		_value(FWD(_new_value)) {}
 //};
 
-void DFSMF(auto&& root)
-{
-	if (root == nullptr) return;
-	std::cout << root->_key << ' ' << root->_value << std::endl;
-	DFSMF(root->_child_left);
-	DFSMF(root->_child_right);
-}
+//void DFSMF(auto&& root)
+//{
+//	if (root == nullptr) return;
+//	std::cout << root->_key << ' ' << root->_value << std::endl;
+//	DFSMF(root->_child_left);
+//	DFSMF(root->_child_right);
+//}
+//
+//void DFSLF(auto&& root)
+//{
+//	if (root == nullptr) return;
+//	DFSLF(root->_child_left);
+//	std::cout << root->_key << ' ' << root->_value << std::endl;
+//	DFSLF(root->_child_right);
+//}
 
-void DFSLF(auto&& root)
-{
-	if (root == nullptr) return;
-	DFSLF(root->_child_left);
-	std::cout << root->_key << ' ' << root->_value << std::endl;
-	DFSLF(root->_child_right);
-}
+constexpr int BENCHMARK_SIZE = 10000000;
+std::vector<int> test_data_in;
+std::vector<int> test_data_out;
 
-void benchmark()
+void benchmark_init()
 {
-	constexpr static int BENCHMARK_SIZE = 100000;
-	namespace chrono = std::chrono;
+	test_data_in.reserve(BENCHMARK_SIZE);
+	test_data_out.reserve(BENCHMARK_SIZE);
 
 	std::default_random_engine e{ std::random_device{}() };
-	std::uniform_int_distribution distribute(-100000, 100000);
-
-	std::vector<int> test_data;
-	test_data.reserve(BENCHMARK_SIZE);
+	std::uniform_int_distribution distribute(-BENCHMARK_SIZE, BENCHMARK_SIZE);
 
 	for (int count = 0; count < BENCHMARK_SIZE; ++count)
 	{
-		test_data.push_back(distribute(e));
+		test_data_in.push_back(distribute(e));
+		test_data_out.push_back(distribute(e));
 	}
+}
+
+#define BENCHMARK_START                                  \
+    start = chrono::system_clock::now();                 \
+    std::atomic_thread_fence(std::memory_order_seq_cst); \
+    do {} while(false)
+
+#define BENCHMARK_END                                               \
+    std::atomic_thread_fence(std::memory_order_seq_cst);            \
+    end = chrono::system_clock::now();                              \
+    dur = chrono::duration_cast<chrono::microseconds>(end - start); \
+    std::cout << dur << std::endl;                                  \
+    total += dur;                                                   \
+    do {} while(false)
+
+template<template<class, class> class T, bool flag>
+void benchmark(const char* name)
+{
+	namespace chrono = std::chrono;
 
 	auto start = chrono::system_clock::now();
-	auto iter = test_data.begin();
+	std::vector<int>::iterator iter;
 	auto end = chrono::system_clock::now();
 	auto dur = chrono::duration_cast<chrono::microseconds>(end - start);
+	decltype(dur) total{};
 
-	AVL<int, double> tree;
+	std::cout << "Benchmark name: " << name << '\n';
+	std::cout << "Benchmark start\n";
 
-	start = chrono::system_clock::now();
-	iter = test_data.begin();
-	while (iter != test_data.end())
+	std::cout << "Construct test: ";
+	BENCHMARK_START;
+	T<int, double> tree;
+	BENCHMARK_END;
+	
+	std::cout << "Insert test: ";
+	BENCHMARK_START;
+	iter = test_data_in.begin();
+	while (iter != test_data_in.end())
 	{
-		tree.push(*iter, static_cast<double>(*iter));
+		if constexpr (flag)
+		{
+			tree.insert(*iter, static_cast<double>(*iter));
+		}
+		else
+		{
+			tree.insert({ *iter, static_cast<double>(*iter) });
+		}
 		++iter;
 	}
+	BENCHMARK_END;
 
-	iter = test_data.begin();
-	while (iter != test_data.end())
+	std::cout << "Find test: ";
+	BENCHMARK_START;
+	iter = test_data_out.begin();
+	while (iter != test_data_out.end())
 	{
-		tree.remove(*iter);
+		tree.find(*iter);
 		++iter;
 	}
-	end = chrono::system_clock::now();
-	dur = chrono::duration_cast<chrono::microseconds>(end - start);
-	std::cout << "Duration 1: " << dur << std::endl;
+	BENCHMARK_END;
 
-	std::map<int, double> map;
-	start = chrono::system_clock::now();
-	iter = test_data.begin();
-	while (iter != test_data.end())
+	std::cout << "Erase test: ";
+	BENCHMARK_START;
+	iter = test_data_out.begin();
+	while (iter != test_data_out.end())
 	{
-		map.insert({ *iter, static_cast<double>(*iter) });
+		tree.erase(*iter);
 		++iter;
 	}
+	BENCHMARK_END;
 
-	iter = test_data.begin();
-	while (iter != test_data.end())
-	{
-		map.erase(*iter);
-		++iter;
-	}
-	end = chrono::system_clock::now();
-	dur = chrono::duration_cast<chrono::microseconds>(end - start);
-	std::cout << "Duration 2: " << dur << std::endl;
+	std::cout << "Total: " << total << '\n';
+	std::cout << "Benchmark end\n" << std::endl;
 }
 
 int main()
 {
-	//benchmark();
-	std::default_random_engine e{ std::random_device{}() };
-	std::uniform_int_distribution distribute(-100000, 100000);
+	benchmark_init();
+	benchmark<AVL, true>("AVL");
+	benchmark<std::map, false>("std::map");
+	//std::default_random_engine e{ std::random_device{}() };
+	//std::uniform_int_distribution distribute(-100000, 100000);
 
-	AVL<int, double> tree;
-	for (int count = 0; count < 100000; ++count)
-	{
-		tree.push(distribute(e), static_cast<double>(count));
-		//tree.DFS_debug_check();
-	}
+	//AVL<int, double> tree;
+	//for (int count = 0; count < 100000; ++count)
+	//{
+	//	tree.push(distribute(e), static_cast<double>(count));
+	//	//tree.DFS_debug_check();
+	//}
 
-	for (int count = 0; count < 100000; ++count)
-	{
-		tree.remove(distribute(e));
-		//tree.DFS_debug_check();
-		//while (!remove_callstack.empty()) { remove_callstack.pop(); }
-		//while (!DFS_callstack.empty()) { DFS_callstack.pop(); }
-	}
+	//for (int count = 0; count < 100000; ++count)
+	//{
+	//	tree.remove(distribute(e));
+	//	//tree.DFS_debug_check();
+	//	//while (!remove_callstack.empty()) { remove_callstack.pop(); }
+	//	//while (!DFS_callstack.empty()) { DFS_callstack.pop(); }
+	//}
 
-	DFSLF(tree._head);
-	std::cout << std::endl;
-	DFSMF(tree._head);
-	std::cout << tree.size();
+	//DFSLF(tree._head);
+	//std::cout << std::endl;
+	//DFSMF(tree._head);
+	//std::cout << tree.size();
 
 	//AVL<int, double> tree;
 	//for (int count = 0; count < 7; ++count)
