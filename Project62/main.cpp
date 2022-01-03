@@ -25,7 +25,7 @@ template<typename T, typename U>
 concept is_cvref_t_of = std::is_same_v<U, std::remove_cvref_t<T>>;
 
 #define UNREACHABLE_BUILDIN_WRAPPER __assume(false)
-#define assert(expression) do { if(!(expression)) { throw std::exception{ "WTF" }; } } while(false)
+#define assert(expression) do { if(!(expression)) { throw std::runtime_error{ "WTF" }; } } while(false)
 
 //#define PMR_ENABLE
 #ifdef PMR_ENABLE
@@ -548,7 +548,7 @@ void benchmark_init(int benchmark_size)
     total += dur;                                                   \
     do {} while(false)
 
-template<template<class, class> class T, bool flag>
+template<template<class...> class T, bool flag>
 void benchmark(const char* name)
 {
 	namespace chrono = std::chrono;
