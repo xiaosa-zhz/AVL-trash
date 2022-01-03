@@ -373,7 +373,8 @@ private:
 public:
 	AVL() : _head(), _size(0) {}
 	std::size_t size() { return _size; }
- 
+
+	[[nodiscard]]
 	std::optional<std::reference_wrapper<value_type>> find(const key_type& key)
 	{
 		auto& result = _find_impl(key);
