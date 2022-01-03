@@ -316,7 +316,9 @@ private:
 							std::unique_ptr<_Node> temp = std::move(iter_root);
 							iter_root = std::move(temp->_child_left);
 							new_root = std::move(temp);
-							if (iter_root)
+							//always update this node since it just got into a new place
+							//always inform parents since its child has been replaced
+							if (iter_root) //root could be set to nullptr, which need no update itself, just inform former nodes
 							{
 								_further_update(iter_root);
 							}
@@ -339,6 +341,8 @@ private:
 				}
 			}
 
+			//always update this node since it just got into a new place
+			//always inform parents since its child has been replaced
 			if (root) //root could be set to nullptr, which need no update itself, just inform former nodes
 			{
 				_further_update(root);
