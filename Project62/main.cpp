@@ -11,9 +11,11 @@
 #include <stack>
 #include <map>
 #include <atomic>
+//#include <memory_resource>
 
 //std::stack<std::tuple<int, bool>> remove_callstack;
 //std::stack<int> DFS_callstack;
+//std::pmr::monotonic_buffer_resource memory_buffer{ 1073741824 };
 
 //#define private public
 
@@ -76,6 +78,16 @@ private:
 		{
 			return _get_height(_child_right) - _get_height(_child_left);
 		}
+
+		//void* operator new(size_t size)
+		//{
+		//	return memory_buffer.allocate(size);
+		//}
+
+		//void operator delete(void* memory, size_t size)
+		//{
+		//	memory_buffer.deallocate(memory, size);
+		//}
 	};
 
 	static long long _get_height(std::unique_ptr<_Node>& child)
@@ -419,6 +431,35 @@ public:
 	{
 		DFS_impl(this->_head);
 	}
+
+	void another_DFS_impl(std::unique_ptr<_Node>& root, long long depth)
+	{
+		static long long former_depth = -1;
+		if (root == nullptr)
+		{
+			if (former_depth == -1)
+			{
+				[[unlikely]];
+				former_depth = depth;
+			}
+			else
+			{
+				auto diff = depth - former_depth;
+				assert(diff >= -1 && diff <= 1);
+				former_depth = depth;
+			}
+			return;
+		}
+		another_DFS_impl(root->_child_left, depth + 1);
+		another_DFS_impl(root->_child_right, depth + 1);
+	}
+
+	//DEBUG
+	void yet_another_DFS_debug_check()
+	{
+		std::cout.sync_with_stdio(false);
+		another_DFS_impl(_head, 1);
+	}
 };
 
 #undef FWD
@@ -463,19 +504,18 @@ public:
 //	DFSLF(root->_child_right);
 //}
 
-constexpr int BENCHMARK_SIZE = 10000000;
 std::vector<int> test_data_in;
 std::vector<int> test_data_out;
 
-void benchmark_init()
+void benchmark_init(int benchmark_size)
 {
-	test_data_in.reserve(BENCHMARK_SIZE);
-	test_data_out.reserve(BENCHMARK_SIZE);
+	test_data_in.reserve(benchmark_size);
+	test_data_out.reserve(benchmark_size);
 
 	std::default_random_engine e{ std::random_device{}() };
-	std::uniform_int_distribution distribute(-BENCHMARK_SIZE, BENCHMARK_SIZE);
+	std::uniform_int_distribution distribute(-benchmark_size, benchmark_size);
 
-	for (int count = 0; count < BENCHMARK_SIZE; ++count)
+	for (int count = 0; count < benchmark_size; ++count)
 	{
 		test_data_in.push_back(distribute(e));
 		test_data_out.push_back(distribute(e));
@@ -557,9 +597,20 @@ void benchmark(const char* name)
 
 int main()
 {
-	benchmark_init();
-	benchmark<AVL, true>("AVL");
+	benchmark_init(10000000);
 	benchmark<std::map, false>("std::map");
+	benchmark<AVL, true>("AVL");
+
+	//AVL<int, double> tree;
+	//auto iter = test_data_in.begin();
+	//while (iter != test_data_in.end())
+	//{
+	//	tree.insert(*iter, static_cast<double>(*iter));
+	//	++iter;
+	//}
+
+	//tree.yet_another_DFS_debug_check();
+	
 	//std::default_random_engine e{ std::random_device{}() };
 	//std::uniform_int_distribution distribute(-100000, 100000);
 
