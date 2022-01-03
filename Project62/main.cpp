@@ -10,8 +10,9 @@
 #include <vector>
 #include <stack>
 #include <map>
+#include <unordered_map>
 #include <atomic>
-//#include <memory_resource>
+#include <memory_resource>
 
 //std::stack<std::tuple<int, bool>> remove_callstack;
 //std::stack<int> DFS_callstack;
@@ -25,6 +26,11 @@ concept is_cvref_t_of = std::is_same_v<U, std::remove_cvref_t<T>>;
 
 #define UNREACHABLE_BUILDIN_WRAPPER __assume(false)
 #define assert(expression) do { if(!(expression)) { throw std::exception{ "WTF" }; } } while(false)
+
+//#define PMR_ENABLE
+#ifdef PMR_ENABLE
+std::pmr::monotonic_buffer_resource memory_buffer{ 65536 };
+#endif // PMR_ENABLE
 
 template<typename _KeyTy, typename _ValTy>
 requires std::totally_ordered<_KeyTy>
@@ -79,15 +85,17 @@ private:
 			return _get_height(_child_right) - _get_height(_child_left);
 		}
 
-		//void* operator new(size_t size)
-		//{
-		//	return memory_buffer.allocate(size);
-		//}
+#ifdef PMR_ENABLE
+		void* operator new(size_t size)
+		{
+			return memory_buffer.allocate(size);
+		}
 
-		//void operator delete(void* memory, size_t size)
-		//{
-		//	memory_buffer.deallocate(memory, size);
-		//}
+		void operator delete(void* memory, size_t size)
+		{
+			memory_buffer.deallocate(memory, size);
+		}
+#endif // PMR_ENABLE
 	};
 
 	static long long _get_height(std::unique_ptr<_Node>& child)
@@ -603,6 +611,7 @@ void benchmark(const char* name)
 int main()
 {
 	benchmark_init(10000000);
+	benchmark<std::unordered_map, false>("std::unordered_map");
 	benchmark<std::map, false>("std::map");
 	benchmark<AVL, true>("AVL");
 
@@ -663,7 +672,6 @@ int main()
 	//std::cout << std::endl;
 	//DFSMF(tree._head);
 	//std::cout << std::endl;
-
 
 	return 0;
 }
