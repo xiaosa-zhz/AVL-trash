@@ -27,9 +27,10 @@ concept is_cvref_t_of = std::is_same_v<U, std::remove_cvref_t<T>>;
 #define UNREACHABLE_BUILDIN_WRAPPER __assume(false)
 #define assert(expression) do { if(!(expression)) { throw std::runtime_error{ "WTF" }; } } while(false)
 
-//#define PMR_ENABLE
+#define PMR_ENABLE
+
 #ifdef PMR_ENABLE
-std::pmr::monotonic_buffer_resource memory_buffer{ 65536 };
+std::pmr::monotonic_buffer_resource* memory_buffer;
 #endif // PMR_ENABLE
 
 template<typename _KeyTy, typename _ValTy>
@@ -88,12 +89,12 @@ private:
 #ifdef PMR_ENABLE
 		void* operator new(size_t size)
 		{
-			return memory_buffer.allocate(size);
+			return memory_buffer->allocate(size);
 		}
 
 		void operator delete(void* memory, size_t size)
 		{
-			memory_buffer.deallocate(memory, size);
+			memory_buffer->deallocate(memory, size);
 		}
 #endif // PMR_ENABLE
 	};
@@ -169,8 +170,8 @@ private:
 			child = std::ref(root->_child_left);
 		}
 
-		auto other_balance = deref(child)->_get_balance();
-		if (other_balance > 0) {
+		balance = deref(child)->_get_balance();
+		if (balance > 0) {
 			_case |= 0b00000001;
 		}
 
@@ -189,8 +190,6 @@ private:
 			root = std::move(_left_rotate(std::move(root)));
 			break;
 		}
-
-		root->_update_height();
 	}
 
 	static is_height_updated _further_update(std::unique_ptr<_Node>& root)
@@ -558,13 +557,14 @@ void benchmark(const char* name)
 	auto end = chrono::system_clock::now();
 	auto dur = chrono::duration_cast<chrono::microseconds>(end - start);
 	decltype(dur) total{};
+	std::pmr::monotonic_buffer_resource buff{ 1288490188 };
 
 	std::cout << "Benchmark name: " << name << '\n';
 	std::cout << "Benchmark start\n";
 
 	std::cout << "Construct test: ";
 	BENCHMARK_START;
-	T<int, double> tree;
+	T<int, double> tree(&buff);
 	BENCHMARK_END;
 	
 	std::cout << "Insert test: ";
@@ -572,14 +572,59 @@ void benchmark(const char* name)
 	iter = test_data_in.begin();
 	while (iter != test_data_in.end())
 	{
-		if constexpr (flag)
-		{
-			tree.insert(*iter, static_cast<double>(*iter));
-		}
-		else
-		{
-			tree.insert({ *iter, static_cast<double>(*iter) });
-		}
+		tree.insert({ *iter, static_cast<double>(*iter) });
+		++iter;
+	}
+	BENCHMARK_END;
+
+	std::cout << "Find test: ";
+	BENCHMARK_START;
+	iter = test_data_out.begin();
+	while (iter != test_data_out.end())
+	{
+		tree.find(*iter);
+		++iter;
+	}
+	BENCHMARK_END;
+
+	std::cout << "Erase test: ";
+	BENCHMARK_START;
+	iter = test_data_out.begin();
+	while (iter != test_data_out.end())
+	{
+		tree.erase(*iter);
+		++iter;
+	}
+	BENCHMARK_END;
+
+	std::cout << "Total: " << total << '\n';
+	std::cout << "Benchmark end\n" << std::endl;
+}
+
+void benchmark_my()
+{
+	namespace chrono = std::chrono;
+
+	auto start = chrono::system_clock::now();
+	std::vector<int>::iterator iter;
+	auto end = chrono::system_clock::now();
+	auto dur = chrono::duration_cast<chrono::microseconds>(end - start);
+	decltype(dur) total{};
+
+	std::cout << "Benchmark name: " << "AVL" << '\n';
+	std::cout << "Benchmark start\n";
+
+	std::cout << "Construct test: ";
+	BENCHMARK_START;
+	AVL<int, double> tree;
+	BENCHMARK_END;
+	
+	std::cout << "Insert test: ";
+	BENCHMARK_START;
+	iter = test_data_in.begin();
+	while (iter != test_data_in.end())
+	{
+		tree.insert(*iter, static_cast<double>(*iter));
 		++iter;
 	}
 	BENCHMARK_END;
@@ -610,10 +655,12 @@ void benchmark(const char* name)
 
 int main()
 {
-	benchmark_init(10000000);
-	benchmark<std::unordered_map, false>("std::unordered_map");
-	benchmark<std::map, false>("std::map");
-	benchmark<AVL, true>("AVL");
+	benchmark_init(1000000);
+	benchmark<std::pmr::unordered_map, false>("std::pmr::unordered_map");
+	benchmark<std::pmr::map, false>("std::pmr::map");
+	std::pmr::monotonic_buffer_resource buff{ 1288490188 };
+	memory_buffer = &buff;
+	benchmark_my();
 
 	//AVL<int, double> tree;
 	//auto iter = test_data_in.begin();
